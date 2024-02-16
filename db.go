@@ -123,10 +123,8 @@ func (db *Database) SaveNewState(state *State) error {
 	return db.executeQuery(query)
 }
 
-func (db *Database) GetAllStates() ([]*State, error) {
+func (db *Database) retrieveStates(query string, args ...string) ([]*State, error) {
 	var states []*State
-
-	query := buildPlaceholder(db.dbType, `SELECT * FROM states`)
 	stmt, err := db.db.Prepare(query)
 	if err != nil {
 		return states, err
@@ -134,7 +132,7 @@ func (db *Database) GetAllStates() ([]*State, error) {
 
 	defer stmt.Close()
 
-	rows, err := stmt.Query()
+	rows, err := stmt.Query(args)
 	if err != nil {
 		return states, err
 	}
@@ -153,32 +151,18 @@ func (db *Database) GetAllStates() ([]*State, error) {
 	return states, nil
 }
 
+func (db *Database) GetAllStates() ([]*State, error) {
+	query := buildPlaceholder(db.dbType, `SELECT * FROM states`)
+	return db.retrieveStates(query)
+}
+
 func (db *Database) GetState(name string) (*State, error) {
-	var state *State
-
 	query := buildPlaceholder(db.dbType, `SELECT * FROM states WHERE name = ?`)
-	stmt, err := db.db.Prepare(query)
-	if err != nil {
-		return state, err
+	states, err := db.retrieveStates(query, name)
+	if err != nil || len(states) == 0 {
+		return nil, err
 	}
-
-	defer stmt.Close()
-
-	rows, err := stmt.Query()
-	if err != nil {
-		return state, err
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		err := rows.Scan(&state.name, &state.contents, &state.locked)
-		if err != nil {
-			return state, nil
-		}
-	}
-
-	return state, nil
+	return states[0], nil
 }
 
 func (db *Database) UpdateState(state *State) error {
