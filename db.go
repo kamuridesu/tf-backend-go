@@ -27,9 +27,11 @@ func buildPlaceholder(dbType DatabaseType, query string) string {
 		return query
 	case postgres:
 		newQuery := ""
+		counter := 1
 		for i := 0; i < len(query); i++ {
 			if query[i] == '?' {
-				newQuery += "$" + strconv.Itoa(i+1)
+				newQuery += "$" + strconv.Itoa(counter)
+				counter++
 				continue
 			}
 			newQuery += string(query[i])
@@ -120,10 +122,14 @@ func (db *Database) Close() {
 
 func (db *Database) SaveNewState(state *State) error {
 	query := buildPlaceholder(db.dbType, `INSERT INTO states (name, content, locked) VALUES (?, ?, ?)`)
-	return db.executeQuery(query)
+	lockedRepr := "0"
+	if state.locked {
+		lockedRepr = "1"
+	}
+	return db.executeQuery(query, state.name, state.contents, lockedRepr)
 }
 
-func (db *Database) retrieveStates(query string, args ...string) ([]*State, error) {
+func (db *Database) retrieveStates(query string, params ...string) ([]*State, error) {
 	var states []*State
 	stmt, err := db.db.Prepare(query)
 	if err != nil {
@@ -132,16 +138,27 @@ func (db *Database) retrieveStates(query string, args ...string) ([]*State, erro
 
 	defer stmt.Close()
 
-	rows, err := stmt.Query(args)
-	if err != nil {
+	var args []reflect.Value
+	for _, param := range params {
+		args = append(args, reflect.ValueOf(param))
+	}
+	execFun := reflect.ValueOf(stmt.Query)
+	result := execFun.Call(args)
+	if result[1].Interface() != nil {
+		err := result[1].Interface().(error)
+		log.Print(err)
 		return states, err
 	}
+	rows := result[0].Interface().(*sql.Rows)
 
 	defer rows.Close()
 
 	for rows.Next() {
 		var state State
-		err := rows.Scan(&state.name, &state.contents, &state.locked)
+		var locked int
+		err := rows.Scan(&state.name, &state.contents, &locked)
+		state.locked = locked == 1
+		state.db = db
 		if err != nil {
 			return states, nil
 		}
@@ -166,10 +183,10 @@ func (db *Database) GetState(name string) (*State, error) {
 }
 
 func (db *Database) UpdateState(state *State) error {
-	query := buildPlaceholder(db.dbType, "UPDATE state SET name=?, content=?, locked=? WHERE name=?")
+	query := buildPlaceholder(db.dbType, "UPDATE states SET name=?, content=?, locked=? WHERE name=?")
 	lockedRepr := "0"
 	if state.locked {
 		lockedRepr = "1"
 	}
-	return db.executeQuery(query, state.name, state.contents, lockedRepr)
+	return db.executeQuery(query, state.name, state.contents, lockedRepr, state.name)
 }
