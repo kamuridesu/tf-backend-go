@@ -4,10 +4,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var server *gin.Engine
+var MainServer *gin.Engine
 
-func serve() {
-	server = gin.Default()
-	buildRoutes()
-	server.Run("0.0.0.0:8081")
+func serve(users map[string]string) {
+	MainServer = gin.Default()
+	buildRoutes(MainServer, users)
+	MainServer.Run("0.0.0.0:8081")
 }

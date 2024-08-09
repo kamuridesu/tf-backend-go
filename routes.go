@@ -16,11 +16,9 @@ func StateError(c *gin.Context, err error) {
 	})
 }
 
-func buildRoutes() {
+func buildRoutes(server *gin.Engine, users map[string]string) {
 
-	authorized := server.Group("/", gin.BasicAuth(gin.Accounts{
-		"kamuri": "test",
-	}))
+	authorized := server.Group("/", gin.BasicAuth(users))
 
 	server.GET("/health", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
