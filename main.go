@@ -1,12 +1,20 @@
 package main
 
-var DB *Database
+import (
+	"github.com/kamuridesu/tf-backend-go/cmd"
+	"github.com/kamuridesu/tf-backend-go/internal/db"
+	"github.com/kamuridesu/tf-backend-go/internal/server"
+)
 
-func mergeUsers(users *[]User) map[string]string {
-	var m map[string]string
+var DB *db.Database
+
+func mergeUsers(users *[]cmd.User) map[string]string {
+	m := map[string]string{}
 
 	for _, user := range *users {
-		m[user.name] = user.password
+		if user.Name != "" && user.Password != "" {
+			m[user.Name] = user.Password
+		}
 	}
 
 	return m
@@ -14,15 +22,15 @@ func mergeUsers(users *[]User) map[string]string {
 
 func main() {
 	var err error
-	users, dbParams := LoadEnvVars()
+	users, dbParams := cmd.LoadEnvVars()
 
-	var dbType DatabaseType = "sqlite3"
+	var dbType db.DatabaseType = "sqlite3"
 	dbArgs := "states.db"
 	if dbParams != "" {
 		dbType = "postgres"
 		dbArgs = dbParams
 	}
-	DB, err = StartDB(dbType, dbArgs)
+	DB, err = db.StartDB(dbType, dbArgs)
 
 	if err != nil {
 		panic(err)
@@ -30,5 +38,5 @@ func main() {
 
 	mapUsers := mergeUsers(users)
 
-	serve(mapUsers)
+	server.Serve(mapUsers, DB)
 }

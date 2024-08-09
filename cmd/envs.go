@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"os"
@@ -6,14 +6,8 @@ import (
 )
 
 type User struct {
-	name     string
-	password string
-}
-
-func (u *User) toMap() map[string]string {
-	var m map[string]string
-	m[u.name] = u.password
-	return m
+	Name     string
+	Password string
 }
 
 func LoadEnvVars() (*[]User, string) {
@@ -27,7 +21,7 @@ func LoadEnvVars() (*[]User, string) {
 				tmp := strings.Split(user, ":")
 				if len(tmp) == 2 {
 					parsedUsers = append(parsedUsers,
-						User{name: tmp[0], password: tmp[1]})
+						User{Name: tmp[0], Password: tmp[1]})
 				}
 			}
 		}

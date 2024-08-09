@@ -1,4 +1,4 @@
-package main
+package routes
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kamuridesu/tf-backend-go/internal/db"
 )
 
 func StateError(c *gin.Context, err error) {
@@ -16,7 +17,7 @@ func StateError(c *gin.Context, err error) {
 	})
 }
 
-func buildRoutes(server *gin.Engine, users map[string]string) {
+func BuildRoutes(server *gin.Engine, database *db.Database, users map[string]string) {
 
 	authorized := server.Group("/", gin.BasicAuth(users))
 
@@ -26,14 +27,14 @@ func buildRoutes(server *gin.Engine, users map[string]string) {
 
 	authorized.Handle("LOCK", "/tfstates/:name", func(ctx *gin.Context) {
 		name := ctx.Param("name")
-		state, err := DB.GetState(name)
+		state, err := database.GetState(name)
 		if err != nil {
 			StateError(ctx, err)
 		}
 		if state == nil {
-			state = NewState(name, DB)
-			state.db.SaveNewState(state)
-		} else if state.locked {
+			state = db.NewState(name, database)
+			state.Database.SaveNewState(state)
+		} else if state.Locked {
 			ctx.JSON(http.StatusLocked, gin.H{
 				"status": "already locked",
 			})
@@ -48,14 +49,14 @@ func buildRoutes(server *gin.Engine, users map[string]string) {
 
 	authorized.Handle("UNLOCK", "/tfstates/:name", func(ctx *gin.Context) {
 		name := ctx.Param("name")
-		state, err := DB.GetState(name)
+		state, err := database.GetState(name)
 		if err != nil {
 			StateError(ctx, err)
 		}
 		if state == nil {
-			state = NewState(name, DB)
-			state.db.SaveNewState(state)
-		} else if !state.locked {
+			state = db.NewState(name, database)
+			state.Database.SaveNewState(state)
+		} else if !state.Locked {
 			ctx.JSON(http.StatusConflict, gin.H{
 				"status": "already unlocked",
 			})
@@ -70,7 +71,7 @@ func buildRoutes(server *gin.Engine, users map[string]string) {
 
 	authorized.Handle("GET", "/tfstates/:name", func(ctx *gin.Context) {
 		name := ctx.Param("name")
-		state, err := DB.GetState(name)
+		state, err := database.GetState(name)
 		if err != nil {
 			StateError(ctx, err)
 		}
@@ -79,18 +80,18 @@ func buildRoutes(server *gin.Engine, users map[string]string) {
 				"status": "state not found",
 			})
 		} else {
-			ctx.String(http.StatusOK, state.contents)
+			ctx.String(http.StatusOK, state.Contents)
 		}
 	})
 
 	authorized.Handle("POST", "/tfstates/:name", func(ctx *gin.Context) {
 		name := ctx.Param("name")
-		state, err := DB.GetState(name)
+		state, err := database.GetState(name)
 		if err != nil {
 			StateError(ctx, err)
 		}
 		if state == nil {
-			state = NewState(name, DB)
+			state = db.NewState(name, database)
 		}
 		data, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {

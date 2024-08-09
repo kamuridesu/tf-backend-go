@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"database/sql"
@@ -123,10 +123,10 @@ func (db *Database) Close() {
 func (db *Database) SaveNewState(state *State) error {
 	query := buildPlaceholder(db.dbType, `INSERT INTO states (name, content, locked) VALUES (?, ?, ?)`)
 	lockedRepr := "0"
-	if state.locked {
+	if state.Locked {
 		lockedRepr = "1"
 	}
-	return db.executeQuery(query, state.name, state.contents, lockedRepr)
+	return db.executeQuery(query, state.Name, state.Contents, lockedRepr)
 }
 
 func (db *Database) retrieveStates(query string, params ...string) ([]*State, error) {
@@ -156,9 +156,9 @@ func (db *Database) retrieveStates(query string, params ...string) ([]*State, er
 	for rows.Next() {
 		var state State
 		var locked int
-		err := rows.Scan(&state.name, &state.contents, &locked)
-		state.locked = locked == 1
-		state.db = db
+		err := rows.Scan(&state.Name, &state.Contents, &locked)
+		state.Locked = locked == 1
+		state.Database = db
 		if err != nil {
 			return states, nil
 		}
@@ -185,8 +185,8 @@ func (db *Database) GetState(name string) (*State, error) {
 func (db *Database) UpdateState(state *State) error {
 	query := buildPlaceholder(db.dbType, "UPDATE states SET name=?, content=?, locked=? WHERE name=?")
 	lockedRepr := "0"
-	if state.locked {
+	if state.Locked {
 		lockedRepr = "1"
 	}
-	return db.executeQuery(query, state.name, state.contents, lockedRepr, state.name)
+	return db.executeQuery(query, state.Name, state.Contents, lockedRepr, state.Name)
 }
