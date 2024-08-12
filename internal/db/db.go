@@ -19,6 +19,7 @@ type Database struct {
 const (
 	sqlite3  DatabaseType = "sqlite3"
 	postgres DatabaseType = "postgres"
+	dynamodb DatabaseType = "dynamodb"
 )
 
 func buildPlaceholder(dbType DatabaseType, query string) string {

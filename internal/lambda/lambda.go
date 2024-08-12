@@ -1,33 +1,59 @@
 package lambda
 
 import (
-	"log"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
-// type Event struct {
-// 	Name string `json:"name"`
-// }
+var NotFoundResponse = events.APIGatewayProxyResponse{
+	StatusCode: 404,
+	Body:       "route not found",
+}
 
-// func HandleRequest(ctx context.Context, event *Event) (*string, error) {
-// 	if event == nil {
-// 		return nil, fmt.Errorf("rcvd nil event")
-// 	}
-// 	message := fmt.Sprintf("Hello %s!", event.Name)
-// 	return &message, nil
-// }
+func BuildApiResponse(status int, msg string) events.APIGatewayProxyResponse {
+	return events.APIGatewayProxyResponse{
+		StatusCode: status,
+		Body:       msg,
+	}
+}
+
+func BuildResponseFromNillable(status int, err error) events.APIGatewayProxyResponse {
+	return BuildApiResponse(status, err.Error())
+}
 
 func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	// if !strings.Contains(req.Path, "tfstates") {
-	// 	return events.APIGatewayProxyResponse{StatusCode: 400, Body: "Missing state name"}, fmt.Errorf("Missing state name")
-	// }
+	targetPath, ok := req.PathParameters["proxy"]
 
-	// stateName = ""
-	log.Println(req.Path)
-	log.Println(req.PathParameters)
-	log.Println(req.Body)
+	if ok {
+		if !strings.HasPrefix(targetPath, "tfstate") {
+			return NotFoundResponse, nil
+		}
+		parsedPath := strings.Split(targetPath, "/")
+		if len(parsedPath) > 2 {
+			return NotFoundResponse, nil
+		}
+		name := parsedPath[1]
+		switch req.HTTPMethod {
+		case "POST":
+			status, err := HandlePost(name, req.Body, Database)
+			return BuildResponseFromNillable(status, err), nil
+		case "GET":
+			status, content, err := HandleGet(name, Database)
+			if err != nil {
+				return BuildResponseFromNillable(status, err), nil
+			}
+			return BuildApiResponse(status, content), nil
+		case "LOCK":
+			status, err := HandleLock(name, Database)
+			return BuildResponseFromNillable(status, err), nil
+		case "UNLOCK":
+			status, err := HandleUnlock(name, Database)
+			return BuildResponseFromNillable(status, err), nil
+		}
+
+	}
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: "ok"}, nil
 }
 

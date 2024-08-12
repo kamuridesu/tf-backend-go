@@ -8,8 +8,11 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22
 )
 
+require github.com/jmespath/go-jmespath v0.4.0 // indirect
+
 require (
 	github.com/aws/aws-lambda-go v1.47.0
+	github.com/aws/aws-sdk-go v1.55.5
 	github.com/bytedance/sonic v1.12.1 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
