@@ -1,6 +1,8 @@
 package lambda
 
 import (
+	"encoding/json"
+	"log/slog"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -12,7 +14,11 @@ var Database *db.Database
 
 var NotFoundResponse = events.APIGatewayProxyResponse{
 	StatusCode: 404,
-	Body:       "route not found",
+	Body:       "route or state not found",
+}
+
+type DefaultResponseWhenNotFound struct {
+	Version int `json:"version"`
 }
 
 func BuildApiResponse(status int, msg string) events.APIGatewayProxyResponse {
@@ -22,13 +28,15 @@ func BuildApiResponse(status int, msg string) events.APIGatewayProxyResponse {
 	}
 }
 
-func BuildResponseFromNillable(status int, err error) events.APIGatewayProxyResponse {
-	return BuildApiResponse(status, err.Error())
-}
-
 func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	ev, err := json.Marshal(req)
+	if err != nil {
+		panic(err)
+	}
+	slog.Info(string(ev))
 	targetPath, ok := req.PathParameters["proxy"]
-
+	reply := NotFoundResponse
+	slog.Info("Received " + targetPath + " as path")
 	if ok {
 		if !strings.HasPrefix(targetPath, "tfstate") {
 			return NotFoundResponse, nil
@@ -38,26 +46,36 @@ func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
 			return NotFoundResponse, nil
 		}
 		name := parsedPath[1]
+		slog.Info("State name: " + name + " with HTTP Method " + req.RequestContext.HTTPMethod)
 		switch req.HTTPMethod {
 		case "POST":
 			status, err := HandlePost(name, req.Body, Database)
-			return BuildResponseFromNillable(status, err), nil
-		case "GET":
+			reply = BuildApiResponse(status, err.Error())
+		case "GET", "HTTP":
 			status, content, err := HandleGet(name, Database)
 			if err != nil {
-				return BuildResponseFromNillable(status, err), nil
+				returnData, err := json.Marshal(&DefaultResponseWhenNotFound{
+					Version: 0,
+				})
+				if err != nil {
+					reply = BuildApiResponse(500, err.Error())
+				} else {
+					reply = BuildApiResponse(status, string(returnData))
+				}
+			} else {
+				reply = BuildApiResponse(status, content)
 			}
-			return BuildApiResponse(status, content), nil
 		case "LOCK":
 			status, err := HandleLock(name, Database)
-			return BuildResponseFromNillable(status, err), nil
+			reply = BuildApiResponse(status, err.Error())
 		case "UNLOCK":
 			status, err := HandleUnlock(name, Database)
-			return BuildResponseFromNillable(status, err), nil
+			reply = BuildApiResponse(status, err.Error())
 		}
 
 	}
-	return events.APIGatewayProxyResponse{StatusCode: 200, Body: "ok"}, nil
+	slog.Info("Reply is " + reply.Body)
+	return reply, nil
 }
 
 func Main() {

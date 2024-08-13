@@ -31,7 +31,7 @@ func OpenDynamoDB() *DynamoDB {
 	}),
 	)
 	d := DynamoDB{svc: dynamodb.New(sess)}
-	d.CreateTable()
+	d.CreateTableIfNotExists()
 	return &d
 }
 
@@ -77,10 +77,6 @@ func (d *DynamoDB) CreateTable() {
 				AttributeType: aws.String("S"),
 			},
 			{
-				AttributeName: aws.String("Content"),
-				AttributeType: aws.String("S"),
-			},
-			{
 				AttributeName: aws.String("Locked"),
 				AttributeType: aws.String("N"),
 			},
@@ -89,6 +85,10 @@ func (d *DynamoDB) CreateTable() {
 			{
 				AttributeName: aws.String("Name"),
 				KeyType:       aws.String("HASH"),
+			},
+			{
+				AttributeName: aws.String("Locked"),
+				KeyType:       aws.String("RANGE"),
 			},
 		},
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
@@ -103,7 +103,7 @@ func (d *DynamoDB) CreateTable() {
 		log.Fatalf("Got error calling CreatingTable: %s", err)
 	}
 
-	slog.Info(fmt.Sprint("Created the table", TABLE_NAME))
+	slog.Info(fmt.Sprint("Created the table ", TABLE_NAME))
 }
 
 func (d *DynamoDB) CreateTableIfNotExists() {

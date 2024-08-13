@@ -16,7 +16,7 @@ func HandleLock(name string, database *db.Database) (int, error) {
 		state = db.NewState(name, database)
 		state.Database.SaveNewState(state)
 	} else if state.Locked {
-		return http.StatusLocked, fmt.Errorf("State %s already locked", name)
+		return http.StatusLocked, fmt.Errorf("state %s already locked", name)
 	}
 	state.Lock()
 	return http.StatusOK, nil
@@ -31,7 +31,7 @@ func HandleUnlock(name string, database *db.Database) (int, error) {
 		state = db.NewState(name, database)
 		state.Database.SaveNewState(state)
 	} else if !state.Locked {
-		return http.StatusConflict, fmt.Errorf("State %s already unlocked", name)
+		return http.StatusConflict, fmt.Errorf("state %s already unlocked", name)
 	}
 	state.Unlock()
 	return http.StatusOK, nil
@@ -43,7 +43,7 @@ func HandleGet(name string, database *db.Database) (int, string, error) {
 		return http.StatusInternalServerError, "", err
 	}
 	if state == nil {
-		return http.StatusNotFound, "", fmt.Errorf("State %s not found", name)
+		return http.StatusOK, "", fmt.Errorf("state %s not found", name)
 	}
 	return http.StatusOK, state.Contents, nil
 }
