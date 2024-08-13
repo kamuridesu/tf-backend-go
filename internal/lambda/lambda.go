@@ -5,7 +5,10 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/kamuridesu/tf-backend-go/internal/db"
 )
+
+var Database *db.Database
 
 var NotFoundResponse = events.APIGatewayProxyResponse{
 	StatusCode: 404,
@@ -58,5 +61,11 @@ func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
 }
 
 func Main() {
+	var err error
+
+	Database, err = db.StartDB(db.DatabaseType("dynamodb"), "")
+	if err != nil {
+		panic(err)
+	}
 	lambda.Start(Router)
 }

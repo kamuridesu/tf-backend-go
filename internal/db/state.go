@@ -18,6 +18,26 @@ func NewState(name string, database *Database) *State {
 	}
 }
 
+type StateDTO struct {
+	Name     string
+	Contents string
+	Locked   int64
+}
+
+func (s *State) AsDTO() StateDTO {
+	locked := 0
+	if s.Locked {
+		locked = 1
+	}
+	statedto := StateDTO{
+		Name:     s.Name,
+		Contents: s.Contents,
+		Locked:   int64(locked),
+	}
+
+	return statedto
+}
+
 func GetAllStates(database *Database) ([]*State, error) {
 	return database.GetAllStates()
 }

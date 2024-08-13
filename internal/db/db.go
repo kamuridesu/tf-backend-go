@@ -14,12 +14,13 @@ type DatabaseType string
 type Database struct {
 	db     *sql.DB
 	dbType DatabaseType
+	dynamo *DynamoDB
 }
 
 const (
 	sqlite3  DatabaseType = "sqlite3"
 	postgres DatabaseType = "postgres"
-	dynamodb DatabaseType = "dynamodb"
+	dynamo   DatabaseType = "dynamodb"
 )
 
 func buildPlaceholder(dbType DatabaseType, query string) string {
@@ -44,6 +45,7 @@ func buildPlaceholder(dbType DatabaseType, query string) string {
 
 func StartDB(dbType DatabaseType, parameters string) (*Database, error) {
 	var db *sql.DB
+	var dydb *DynamoDB
 	var err error
 	switch dbType {
 	case sqlite3:
@@ -56,6 +58,12 @@ func StartDB(dbType DatabaseType, parameters string) (*Database, error) {
 		if err != nil {
 			panic(err)
 		}
+	case dynamo:
+		dydb = OpenDynamoDB()
+		return &Database{
+			dbType: dbType,
+			dynamo: dydb,
+		}, nil
 	}
 
 	sqlStmt := `CREATE TABLE IF NOT EXISTS "states" (
@@ -122,6 +130,11 @@ func (db *Database) Close() {
 }
 
 func (db *Database) SaveNewState(state *State) error {
+
+	if db.dbType == dynamo {
+		return db.dynamo.NewState(state)
+	}
+
 	query := buildPlaceholder(db.dbType, `INSERT INTO states (name, content, locked) VALUES (?, ?, ?)`)
 	lockedRepr := "0"
 	if state.Locked {
@@ -175,6 +188,14 @@ func (db *Database) GetAllStates() ([]*State, error) {
 }
 
 func (db *Database) GetState(name string) (*State, error) {
+	if db.dbType == dynamo {
+		state, err := db.dynamo.GetState(name)
+		if state != nil {
+			state.Database = db
+		}
+		return state, err
+	}
+
 	query := buildPlaceholder(db.dbType, `SELECT * FROM states WHERE name = ?`)
 	states, err := db.retrieveStates(query, name)
 	if err != nil || len(states) == 0 {
@@ -184,6 +205,11 @@ func (db *Database) GetState(name string) (*State, error) {
 }
 
 func (db *Database) UpdateState(state *State) error {
+
+	if db.dbType == dynamo {
+		return db.dynamo.UpdateState(state)
+	}
+
 	query := buildPlaceholder(db.dbType, "UPDATE states SET name=?, content=?, locked=? WHERE name=?")
 	lockedRepr := "0"
 	if state.Locked {
