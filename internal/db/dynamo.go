@@ -1,157 +1,168 @@
 package db
 
 import (
-	"errors"
+	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
+	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
 type DynamoDB struct {
-	svc *dynamodb.DynamoDB
+	svc *dynamodb.Client
 }
 
 const TABLE_NAME = "tfstates"
 
-func OpenDynamoDB() *DynamoDB {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("REGIONS")),
-		Credentials: credentials.NewStaticCredentials(
+func OpenDynamoDB() (*DynamoDB, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			os.Getenv("ACCESS_KEY"),
 			os.Getenv("SECRET_ACCESS_KEY"),
-			""),
-	}),
+			"",
+		)),
 	)
-	d := DynamoDB{svc: dynamodb.New(sess)}
-	d.CreateTableIfNotExists()
-	return &d
+	if err != nil {
+		return nil, err
+	}
+
+	d := DynamoDB{svc: dynamodb.NewFromConfig(cfg)}
+	err = d.CreateTableIfNotExists()
+	if err != nil {
+		return nil, err
+	}
+
+	return &d, nil
 }
 
 func (d *DynamoDB) ListTables() []string {
 	tableNames := make([]string, 0)
-	input := &dynamodb.ListTablesInput{}
 
-	for {
-		result, err := d.svc.ListTables(input)
+	var output *dynamodb.ListTablesOutput
+	var err error
+
+	tablePaginator := dynamodb.NewListTablesPaginator(d.svc, &dynamodb.ListTablesInput{})
+	for tablePaginator.HasMorePages() {
+		output, err = tablePaginator.NextPage(context.TODO())
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				case dynamodb.ErrCodeInternalServerError:
-					log.Fatal(fmt.Sprint(dynamodb.ErrCodeInternalServerError, aerr.Error()))
-				default:
-					log.Fatal(aerr.Error())
-				}
-			} else {
-				log.Fatal(err.Error())
-			}
-			return tableNames
-		}
-
-		for _, n := range result.TableNames {
-			tableNames = append(tableNames, *n)
-		}
-
-		input.ExclusiveStartTableName = result.LastEvaluatedTableName
-
-		if result.LastEvaluatedTableName == nil {
+			slog.Error(fmt.Sprintf("could not list tables, reason: %v", err))
 			break
+		} else {
+			tableNames = append(tableNames, output.TableNames...)
 		}
 	}
 
 	return tableNames
 }
 
-func (d *DynamoDB) CreateTable() {
-	input := &dynamodb.CreateTableInput{
-		AttributeDefinitions: []*dynamodb.AttributeDefinition{
+func (d *DynamoDB) CreateTable() error {
+
+	_, err := d.svc.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+		AttributeDefinitions: []types.AttributeDefinition{
 			{
 				AttributeName: aws.String("Name"),
-				AttributeType: aws.String("S"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+			{
+				AttributeName: aws.String("Contents"),
+				AttributeType: types.ScalarAttributeTypeS,
 			},
 			{
 				AttributeName: aws.String("Locked"),
-				AttributeType: aws.String("N"),
+				AttributeType: types.ScalarAttributeTypeN,
 			},
 		},
-		KeySchema: []*dynamodb.KeySchemaElement{
-			{
-				AttributeName: aws.String("Name"),
-				KeyType:       aws.String("HASH"),
-			},
-			{
-				AttributeName: aws.String("Locked"),
-				KeyType:       aws.String("RANGE"),
-			},
-		},
-		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+		TableName: aws.String(TABLE_NAME),
+		ProvisionedThroughput: &types.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(5),
 			WriteCapacityUnits: aws.Int64(5),
 		},
-		TableName: aws.String(TABLE_NAME),
-	}
+	})
 
-	_, err := d.svc.CreateTable(input)
 	if err != nil {
-		log.Fatalf("Got error calling CreatingTable: %s", err)
+		return err
+	} else {
+		waiter := dynamodb.NewTableExistsWaiter(d.svc)
+		err := waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{
+			TableName: aws.String(TABLE_NAME)}, 5*time.Minute)
+		if err != nil {
+			return err
+		}
 	}
 
-	slog.Info(fmt.Sprint("Created the table ", TABLE_NAME))
+	return nil
+
 }
 
-func (d *DynamoDB) CreateTableIfNotExists() {
+func (d *DynamoDB) CreateTableIfNotExists() error {
 	tables := d.ListTables()
 	for _, table := range tables {
 		if table == TABLE_NAME {
-			return
+			return nil
 		}
 	}
-	d.CreateTable()
+	return d.CreateTable()
 }
 
 func (d *DynamoDB) NewState(state *State) error {
-	av, err := dynamodbattribute.MarshalMap(state.AsDTO())
+
+	item, err := attributevalue.MarshalMap(state.AsDTO())
 	if err != nil {
 		return err
 	}
-	input := &dynamodb.PutItemInput{
-		Item:      av,
-		TableName: aws.String(TABLE_NAME),
-	}
+	_, err = d.svc.PutItem(context.TODO(), &dynamodb.PutItemInput{
+		TableName: aws.String(TABLE_NAME), Item: item,
+	})
 
-	_, err = d.svc.PutItem(input)
 	return err
 }
 
 func (d *DynamoDB) GetState(name string) (*State, error) {
-	result, err := d.svc.GetItem(&dynamodb.GetItemInput{
-		TableName: aws.String(TABLE_NAME),
-		Key: map[string]*dynamodb.AttributeValue{
-			"Name": {
-				S: aws.String(name),
-			},
-		},
+	var err error
+	keyEx := expression.Key("Name").Equal(expression.Value(name))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyEx).Build()
+	if err != nil {
+		return nil, err
+	}
+
+	var states []StateDTO
+
+	queryPaginator := dynamodb.NewQueryPaginator(d.svc, &dynamodb.QueryInput{
+		TableName:                 aws.String(TABLE_NAME),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
 	})
-	if err != nil {
-		log.Fatalf("Got error calling GetItem: %s", err)
+	for queryPaginator.HasMorePages() {
+		response, err := queryPaginator.NextPage(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+		var statedto []StateDTO
+		err = attributevalue.UnmarshalListOfMaps(response.Items, &statedto)
+		if err != nil {
+			return nil, err
+		}
+		states = append(states, statedto...)
 	}
 
-	if result.Item == nil {
-		return nil, errors.New("Could not find state '" + name + "'")
+	if len(states) == 0 {
+		return nil, fmt.Errorf("Could not find state '" + name + "'")
 	}
 
-	statedto := StateDTO{}
-	err = dynamodbattribute.UnmarshalMap(result.Item, &statedto)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to unmarshal Record, %v", err))
+	if len(states) > 1 {
+		return nil, fmt.Errorf("length of states inconsistent, try to create a new index")
 	}
+
+	statedto := states[0]
 
 	state := State{
 		Name:     statedto.Name,
@@ -163,22 +174,21 @@ func (d *DynamoDB) GetState(name string) (*State, error) {
 }
 
 func (d *DynamoDB) UpdateState(state *State) error {
-	input := &dynamodb.UpdateItemInput{
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":r": {
-				S: aws.String(state.Contents),
-			},
-		},
-		TableName: aws.String(TABLE_NAME),
-		Key: map[string]*dynamodb.AttributeValue{
-			"Name": {
-				S: aws.String(state.Name),
-			},
-		},
-		ReturnValues:     aws.String("UPDATED_NEW"),
-		UpdateExpression: aws.String("set Content = :r"),
+	update := expression.Set(expression.Name("Contents"), expression.Value(state.Contents))
+	expr, err := expression.NewBuilder().WithUpdate(update).Build()
+	if err != nil {
+		return err
 	}
 
-	_, err := d.svc.UpdateItem(input)
+	_, err = d.svc.UpdateItem(context.TODO(), &dynamodb.UpdateItemInput{
+		TableName: aws.String(TABLE_NAME),
+		Key: map[string]types.AttributeValue{
+			"Name": &types.AttributeValueMemberS{Value: state.Name},
+		},
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		UpdateExpression:          expr.Update(),
+		ReturnValues:              types.ReturnValueUpdatedNew,
+	})
 	return err
 }

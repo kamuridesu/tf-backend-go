@@ -19,9 +19,9 @@ func NewState(name string, database *Database) *State {
 }
 
 type StateDTO struct {
-	Name     string
-	Contents string
-	Locked   int64
+	Name     string `json:"name" dynamodbav:"Name"`
+	Contents string `json:"contents" dynamodbav:"Contents"`
+	Locked   int64  `json:"locked" dynamodbav:"Locked"`
 }
 
 func (s *State) AsDTO() StateDTO {

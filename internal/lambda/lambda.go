@@ -1,7 +1,9 @@
 package lambda
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -17,7 +19,7 @@ var NotFoundResponse = events.APIGatewayProxyResponse{
 	Body:       "route or state not found",
 }
 
-type DefaultResponseWhenNotFound struct {
+type DefaultResponseWhenNotFoundS struct {
 	Version int `json:"version"`
 }
 
@@ -28,14 +30,17 @@ func BuildApiResponse(status int, msg string) events.APIGatewayProxyResponse {
 	}
 }
 
-func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	ev, err := json.Marshal(req)
-	if err != nil {
-		panic(err)
-	}
-	slog.Info(string(ev))
-	targetPath, ok := req.PathParameters["proxy"]
+func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse, error) {
 	reply := NotFoundResponse
+	defaultResponseWhenNotFound, err := json.Marshal(&DefaultResponseWhenNotFoundS{
+		Version: 0,
+	})
+
+	if err != nil {
+		reply = BuildApiResponse(500, err.Error())
+	}
+
+	targetPath, ok := req.PathParameters["proxy"]
 	slog.Info("Received " + targetPath + " as path")
 	if ok {
 		if !strings.HasPrefix(targetPath, "tfstate") {
@@ -46,36 +51,42 @@ func Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
 			return NotFoundResponse, nil
 		}
 		name := parsedPath[1]
-		slog.Info("State name: " + name + " with HTTP Method " + req.RequestContext.HTTPMethod)
-		switch req.HTTPMethod {
+		slog.Info("State name: " + name + " with HTTP Method " + req.RequestContext.HTTP.Method)
+		switch req.RequestContext.HTTP.Method {
 		case "POST":
 			status, err := HandlePost(name, req.Body, Database)
-			reply = BuildApiResponse(status, err.Error())
+			if err != nil {
+				reply = BuildApiResponse(status, err.Error())
+			}
+			reply = BuildApiResponse(status, "ok")
 		case "GET", "HTTP":
 			status, content, err := HandleGet(name, Database)
 			if err != nil {
-				returnData, err := json.Marshal(&DefaultResponseWhenNotFound{
-					Version: 0,
-				})
-				if err != nil {
-					reply = BuildApiResponse(500, err.Error())
-				} else {
-					reply = BuildApiResponse(status, string(returnData))
-				}
+				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
 			} else {
 				reply = BuildApiResponse(status, content)
 			}
 		case "LOCK":
 			status, err := HandleLock(name, Database)
+			if err != nil {
+				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
+			}
 			reply = BuildApiResponse(status, err.Error())
 		case "UNLOCK":
 			status, err := HandleUnlock(name, Database)
-			reply = BuildApiResponse(status, err.Error())
+			if err != nil {
+				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
+			}
 		}
 
 	}
 	slog.Info("Reply is " + reply.Body)
 	return reply, nil
+}
+
+func Logger(c context.Context, m interface{}) {
+	fmt.Println(m)
+	fmt.Println(c)
 }
 
 func Main() {

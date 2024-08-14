@@ -59,7 +59,10 @@ func StartDB(dbType DatabaseType, parameters string) (*Database, error) {
 			panic(err)
 		}
 	case dynamo:
-		dydb = OpenDynamoDB()
+		dydb, err = OpenDynamoDB()
+		if err != nil {
+			return nil, err
+		}
 		return &Database{
 			dbType: dbType,
 			dynamo: dydb,
