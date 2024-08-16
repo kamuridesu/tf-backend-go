@@ -1,6 +1,6 @@
 terraform {
   backend "http" {
-    address = "https://2nh515zrbf.execute-api.us-east-1.amazonaws.com/tfstates/test"
+    address = "https://5arjjg54d2uuen2hp2rsmjxg5y0rkhju.lambda-url.us-east-1.on.aws/tfstates/test"
     username = "kamuri"
     password = "test"
   }
