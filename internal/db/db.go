@@ -133,7 +133,6 @@ func (db *Database) Close() {
 }
 
 func (db *Database) SaveNewState(state *State) error {
-
 	if db.dbType == dynamo {
 		return db.dynamo.NewState(state)
 	}

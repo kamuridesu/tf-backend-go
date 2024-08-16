@@ -1,49 +1,91 @@
 package lambda
 
 import (
-	"context"
+	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/kamuridesu/tf-backend-go/cmd"
 	"github.com/kamuridesu/tf-backend-go/internal/db"
 )
 
-var Database *db.Database
+var (
+	Database *db.Database
 
-var NotFoundResponse = events.APIGatewayProxyResponse{
-	StatusCode: 404,
-	Body:       "route or state not found",
+	NotFoundResponse = events.APIGatewayProxyResponse{
+		StatusCode: 404,
+		Body:       "route or state not found",
+	}
+	Users, _ = cmd.LoadEnvVars()
+)
+
+func ValidateUser(users *[]cmd.User, authData string) bool {
+	if authData == "" {
+		return false
+	}
+
+	if !strings.Contains(authData, "Basic") {
+		return false
+	}
+
+	decodedData, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authData, "Basic "))
+	if err != nil {
+		return false
+	}
+
+	userData := strings.Split(string(decodedData), ":")
+	if len(userData) != 2 {
+		return false
+	}
+	username := userData[0]
+	password := userData[1]
+
+	for _, user := range *users {
+		if user.Name == username && user.Password == password {
+			return true
+		}
+	}
+	return false
 }
 
-type DefaultResponseWhenNotFoundS struct {
-	Version int `json:"version"`
-}
+func BuildApiResponse(status int, msg string, asJson bool) events.APIGatewayProxyResponse {
+	body := msg
+	if asJson {
 
-func BuildApiResponse(status int, msg string) events.APIGatewayProxyResponse {
+		bbody, err := json.Marshal(map[string]string{
+			"status": msg,
+		})
+		if err != nil {
+			slog.Error("could not parse msg to json")
+			panic(err)
+		}
+		body = string(bbody)
+	}
 	return events.APIGatewayProxyResponse{
 		StatusCode: status,
-		Body:       msg,
+		Body:       body,
 	}
 }
 
 func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse, error) {
-	reply := NotFoundResponse
-	defaultResponseWhenNotFound, err := json.Marshal(&DefaultResponseWhenNotFoundS{
-		Version: 0,
-	})
 
-	if err != nil {
-		reply = BuildApiResponse(500, err.Error())
+	authData := req.Headers["authorization"]
+	a, _ := json.Marshal(req.Headers)
+	slog.Info(string(a))
+
+	if !ValidateUser(Users, authData) {
+		return BuildApiResponse(http.StatusUnauthorized, "User not authorized", false), nil
 	}
 
+	reply := NotFoundResponse
+
 	targetPath, ok := req.PathParameters["proxy"]
-	slog.Info("Received " + targetPath + " as path")
 	if ok {
-		if !strings.HasPrefix(targetPath, "tfstate") {
+		if !strings.HasPrefix(targetPath, "tfstates") {
 			return NotFoundResponse, nil
 		}
 		parsedPath := strings.Split(targetPath, "/")
@@ -56,43 +98,39 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 		case "POST":
 			status, err := HandlePost(name, req.Body, Database)
 			if err != nil {
-				reply = BuildApiResponse(status, err.Error())
+				reply = BuildApiResponse(status, err.Error(), true)
+			} else {
+				reply = BuildApiResponse(status, "ok", true)
 			}
-			reply = BuildApiResponse(status, "ok")
 		case "GET":
 			status, content, err := HandleGet(name, Database)
 			if err != nil {
-				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
+				reply = BuildApiResponse(status, err.Error(), true)
 			} else {
-				reply = BuildApiResponse(status, content)
+				reply = BuildApiResponse(status, content, false)
 			}
 		case "LOCK":
 			status, err := HandleLock(name, Database)
 			if err != nil {
-				reply = BuildApiResponse(status, err.Error())
+				reply = BuildApiResponse(status, err.Error(), true)
+			} else {
+				reply = BuildApiResponse(status, "ok", true)
 			}
-			reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
 		case "UNLOCK":
 			status, err := HandleUnlock(name, Database)
 			if err != nil {
-				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
+				reply = BuildApiResponse(status, "ok", true)
 			}
 		}
 
 	}
-	slog.Info("Reply is " + reply.Body)
 	return reply, nil
-}
-
-func Logger(c context.Context, m interface{}) {
-	fmt.Println(m)
-	fmt.Println(c)
 }
 
 func Main() {
 	var err error
 
-	Database, err = db.StartDB(db.DatabaseType("dynamodb"), "")
+	Database, err = db.StartDB("dynamodb", "")
 	if err != nil {
 		panic(err)
 	}

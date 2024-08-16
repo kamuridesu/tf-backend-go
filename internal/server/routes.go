@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,7 +10,6 @@ import (
 )
 
 func StateError(c *gin.Context, err error) {
-	log.Println(err)
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"error": fmt.Sprintf("error: %v", err),
 	})
@@ -33,7 +31,10 @@ func BuildRoutes(server *gin.Engine, database *db.Database, users map[string]str
 		}
 		if state == nil {
 			state = db.NewState(name, database)
-			state.Database.SaveNewState(state)
+			err := state.Database.SaveNewState(state)
+			if err != nil {
+				StateError(ctx, err)
+			}
 		} else if state.Locked {
 			ctx.JSON(http.StatusLocked, gin.H{
 				"status": "already locked",
@@ -55,7 +56,10 @@ func BuildRoutes(server *gin.Engine, database *db.Database, users map[string]str
 		}
 		if state == nil {
 			state = db.NewState(name, database)
-			state.Database.SaveNewState(state)
+			err := state.Database.SaveNewState(state)
+			if err != nil {
+				StateError(ctx, err)
+			}
 		} else if !state.Locked {
 			ctx.JSON(http.StatusConflict, gin.H{
 				"status": "already unlocked",
@@ -92,12 +96,21 @@ func BuildRoutes(server *gin.Engine, database *db.Database, users map[string]str
 		}
 		if state == nil {
 			state = db.NewState(name, database)
+			err := state.Database.SaveNewState(state)
+			if err != nil {
+				StateError(ctx, err)
+			}
 		}
 		data, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
 			StateError(ctx, err)
 		}
-		state.Update(string(data))
-		ctx.String(http.StatusOK, "ok")
+		err = state.Update(string(data))
+		if err != nil {
+			StateError(ctx, err)
+		} else {
+			ctx.String(http.StatusOK, "ok")
+		}
+
 	})
 }

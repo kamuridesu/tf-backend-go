@@ -1,10 +1,12 @@
 package main
 
 import (
+	"os"
+
 	"github.com/kamuridesu/tf-backend-go/cmd"
 	"github.com/kamuridesu/tf-backend-go/internal/db"
-	// "github.com/kamuridesu/tf-backend-go/internal/server"
 	"github.com/kamuridesu/tf-backend-go/internal/lambda"
+	"github.com/kamuridesu/tf-backend-go/internal/server"
 )
 
 var DB *db.Database
@@ -22,24 +24,27 @@ func mergeUsers(users *[]cmd.User) map[string]string {
 }
 
 func main() {
-	// var err error
-	// users, dbParams := cmd.LoadEnvVars()
 
-	// var dbType db.DatabaseType = "sqlite3"
-	// dbArgs := "states.db"
-	// if dbParams != "" {
-	// 	dbType = "postgres"
-	// 	dbArgs = dbParams
-	// }
-	// DB, err = db.StartDB(dbType, dbArgs)
+	if os.Getenv("ACCESS_KEY") != "" {
+		lambda.Main()
+	} else {
+		var err error
+		users, dbParams := cmd.LoadEnvVars()
 
-	// if err != nil {
-	// 	panic(err)
-	// }
+		var dbType db.DatabaseType = "sqlite3"
+		dbArgs := "states.db"
+		if dbParams != "" {
+			dbType = "postgres"
+			dbArgs = dbParams
+		}
+		DB, err = db.StartDB(dbType, dbArgs)
 
-	// mapUsers := mergeUsers(users)
+		if err != nil {
+			panic(err)
+		}
 
-	// server.Serve(mapUsers, DB)
+		mapUsers := mergeUsers(users)
 
-	lambda.Main()
+		server.Serve(mapUsers, DB)
+	}
 }

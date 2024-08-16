@@ -43,7 +43,7 @@ func HandleGet(name string, database *db.Database) (int, string, error) {
 		return http.StatusInternalServerError, "", err
 	}
 	if state == nil {
-		return http.StatusOK, "", fmt.Errorf("state %s not found", name)
+		return http.StatusNotFound, "", fmt.Errorf("state %s not found", name)
 	}
 	return http.StatusOK, state.Contents, nil
 }

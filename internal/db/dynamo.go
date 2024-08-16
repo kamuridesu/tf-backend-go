@@ -155,10 +155,12 @@ func (d *DynamoDB) GetState(name string) (*State, error) {
 	}
 
 	if len(states) == 0 {
-		return nil, fmt.Errorf("Could not find state '" + name + "'")
+		slog.Warn("states is empty")
+		return nil, nil
 	}
 
 	if len(states) > 1 {
+		slog.Warn("more than one state found")
 		return nil, fmt.Errorf("length of states inconsistent, try to create a new index")
 	}
 
@@ -180,15 +182,22 @@ func (d *DynamoDB) UpdateState(state *State) error {
 		return err
 	}
 
+	locked := "0"
+	if state.Locked {
+		locked = "1"
+	}
+
 	_, err = d.svc.UpdateItem(context.TODO(), &dynamodb.UpdateItemInput{
 		TableName: aws.String(TABLE_NAME),
 		Key: map[string]types.AttributeValue{
-			"Name": &types.AttributeValueMemberS{Value: state.Name},
+			"Name":   &types.AttributeValueMemberS{Value: state.Name},
+			"Locked": &types.AttributeValueMemberN{Value: locked},
 		},
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		UpdateExpression:          expr.Update(),
 		ReturnValues:              types.ReturnValueUpdatedNew,
 	})
+
 	return err
 }
