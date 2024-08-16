@@ -56,5 +56,5 @@ Create a new table called `tfstates` with Name as Partition Key and Locked as So
 
 ## Routes
 
-`/tfstates` -> base route for Terraform Operations
-`tfstates/:name` -> route for Terraform Operations
+- `/tfstates` -> base route for Terraform Operations
+- `tfstates/:name` -> route for Terraform Operations
