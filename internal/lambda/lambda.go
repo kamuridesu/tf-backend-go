@@ -3,6 +3,7 @@ package lambda
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -65,16 +66,25 @@ func BuildApiResponse(status int, msg string, asJson bool) events.APIGatewayProx
 		}
 		body = string(bbody)
 	}
+
+	headers := map[string]string{
+		"content-type": "application/json",
+	}
+
+	if !asJson {
+		headers["content-type"] = "text/plain; charset=utf-8"
+	}
 	return events.APIGatewayProxyResponse{
 		StatusCode: status,
 		Body:       body,
+		Headers:    headers,
 	}
 }
 
 func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse, error) {
 
 	authData := req.Headers["authorization"]
-	a, _ := json.Marshal(req.Headers)
+	a, _ := json.Marshal(req)
 	slog.Info(string(a))
 
 	if !ValidateUser(Users, authData) {
@@ -83,47 +93,47 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 
 	reply := NotFoundResponse
 
-	targetPath, ok := req.PathParameters["proxy"]
-	if ok {
-		if !strings.HasPrefix(targetPath, "tfstates") {
-			return NotFoundResponse, nil
-		}
-		parsedPath := strings.Split(targetPath, "/")
-		if len(parsedPath) > 2 {
-			return NotFoundResponse, nil
-		}
-		name := parsedPath[1]
-		slog.Info("State name: " + name + " with HTTP Method " + req.RequestContext.HTTP.Method)
-		switch req.RequestContext.HTTP.Method {
-		case "POST":
-			status, err := HandlePost(name, req.Body, Database)
-			if err != nil {
-				reply = BuildApiResponse(status, err.Error(), true)
-			} else {
-				reply = BuildApiResponse(status, "ok", true)
-			}
-		case "GET":
-			status, content, err := HandleGet(name, Database)
-			if err != nil {
-				reply = BuildApiResponse(status, err.Error(), true)
-			} else {
-				reply = BuildApiResponse(status, content, false)
-			}
-		case "LOCK":
-			status, err := HandleLock(name, Database)
-			if err != nil {
-				reply = BuildApiResponse(status, err.Error(), true)
-			} else {
-				reply = BuildApiResponse(status, "ok", true)
-			}
-		case "UNLOCK":
-			status, err := HandleUnlock(name, Database)
-			if err != nil {
-				reply = BuildApiResponse(status, "ok", true)
-			}
-		}
-
+	targetPath := strings.TrimPrefix(req.RawPath, "/")
+	if !strings.HasPrefix(targetPath, "tfstates") {
+		slog.Error("prefix invalid")
+		return NotFoundResponse, nil
 	}
+	parsedPath := strings.Split(targetPath, "/")
+	if len(parsedPath) > 2 {
+		slog.Error("invalid path")
+		return NotFoundResponse, nil
+	}
+	name := parsedPath[1]
+	slog.Info("State name: " + name + " with HTTP Method " + req.RequestContext.HTTP.Method)
+	switch req.RequestContext.HTTP.Method {
+	case "POST":
+		status, err := HandlePost(name, req.Body, Database)
+		if err != nil {
+			reply = BuildApiResponse(status, err.Error(), true)
+		} else {
+			reply = BuildApiResponse(status, "ok", true)
+		}
+	case "GET":
+		status, content, err := HandleGet(name, Database)
+		if err != nil {
+			reply = BuildApiResponse(status, err.Error(), true)
+		} else {
+			reply = BuildApiResponse(status, content, false)
+		}
+	case "LOCK":
+		status, err := HandleLock(name, Database)
+		if err != nil {
+			reply = BuildApiResponse(status, err.Error(), true)
+		} else {
+			reply = BuildApiResponse(status, "ok", true)
+		}
+	case "UNLOCK":
+		status, err := HandleUnlock(name, Database)
+		if err != nil {
+			reply = BuildApiResponse(status, "ok", true)
+		}
+	}
+	slog.Info(fmt.Sprintf("Returning %s with status %d", reply.Body, reply.StatusCode))
 	return reply, nil
 }
 
