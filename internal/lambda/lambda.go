@@ -24,6 +24,10 @@ var (
 	Users, _ = cmd.LoadEnvVars()
 )
 
+const (
+	PATH_PREFIX string = "tfstates"
+)
+
 func ValidateUser(users *[]cmd.User, authData string) bool {
 	if authData == "" {
 		return false
@@ -84,8 +88,6 @@ func BuildApiResponse(status int, msg string, asJson bool) events.APIGatewayProx
 func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse, error) {
 
 	authData := req.Headers["authorization"]
-	a, _ := json.Marshal(req)
-	slog.Info(string(a))
 
 	if !ValidateUser(Users, authData) {
 		return BuildApiResponse(http.StatusUnauthorized, "User not authorized", false), nil
@@ -94,10 +96,7 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 	reply := NotFoundResponse
 
 	targetPath := strings.TrimPrefix(req.RawPath, "/")
-	if !strings.HasPrefix(targetPath, "tfstates") {
-		slog.Error("prefix invalid")
-		return NotFoundResponse, nil
-	}
+	targetPath = strings.TrimPrefix(targetPath, PATH_PREFIX)
 	parsedPath := strings.Split(targetPath, "/")
 	if len(parsedPath) > 2 {
 		slog.Error("invalid path")
