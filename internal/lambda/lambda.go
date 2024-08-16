@@ -59,7 +59,7 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 				reply = BuildApiResponse(status, err.Error())
 			}
 			reply = BuildApiResponse(status, "ok")
-		case "GET", "HTTP":
+		case "GET":
 			status, content, err := HandleGet(name, Database)
 			if err != nil {
 				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
@@ -69,9 +69,9 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 		case "LOCK":
 			status, err := HandleLock(name, Database)
 			if err != nil {
-				reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
+				reply = BuildApiResponse(status, err.Error())
 			}
-			reply = BuildApiResponse(status, err.Error())
+			reply = BuildApiResponse(status, string(defaultResponseWhenNotFound))
 		case "UNLOCK":
 			status, err := HandleUnlock(name, Database)
 			if err != nil {
