@@ -44,11 +44,16 @@ Then just upload the .zip file containing the executable.
 
 ### API Gateway
 
+
+#### New API gateway
 Click Create API, then HTTP API. Add Lambda integration and search for the Lambda Function you created. Select it and give it a name. 
 
 Then create a route that starts with / and another that starts with /{proxy+}, the later will be used to give a name to the Terraform State. The method for all routes should be `ANY`.
 
 After creating the routes just integrate it with the Lambda Function you created. Get the URL clicking on Deploy -> Stages.
+
+#### Existing API Gateway
+If you already has an API Gateway, just setup it to use {proxy+} in a route and integrate it to the lambda function. Remember, the method should be ANY.
 
 ### DynamoDB
 
@@ -56,5 +61,4 @@ Create a new table called `tfstates` with Name as Partition Key and Locked as So
 
 ## Routes
 
-- `/tfstates` -> base route for Terraform Operations
 - `tfstates/:name` -> route for Terraform Operations
