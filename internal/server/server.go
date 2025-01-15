@@ -7,7 +7,7 @@ import (
 
 var MainServer *gin.Engine
 
-func Serve(users map[string]string, database *db.Database) {
+func Serve(users map[string]string, database db.Database) {
 	MainServer = gin.Default()
 	BuildRoutes(MainServer, database, users)
 	MainServer.Run("0.0.0.0:8081")

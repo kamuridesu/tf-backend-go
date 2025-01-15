@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	Database *db.Database
+	Database db.Database
 
 	NotFoundResponse = events.APIGatewayProxyResponse{
 		StatusCode: 404,
@@ -139,7 +139,7 @@ func Router(req events.APIGatewayV2HTTPRequest) (events.APIGatewayProxyResponse,
 func Main() {
 	var err error
 
-	Database, err = db.StartDB("dynamodb", "")
+	Database, err = db.NewDatabase(db.Dynamo, "")
 	if err != nil {
 		panic(err)
 	}

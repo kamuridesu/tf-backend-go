@@ -7,7 +7,7 @@ import (
 	"github.com/kamuridesu/tf-backend-go/internal/db"
 )
 
-func HandleLock(name string, database *db.Database) (int, error) {
+func HandleLock(name string, database db.Database) (int, error) {
 	state, err := database.GetState(name)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -22,7 +22,7 @@ func HandleLock(name string, database *db.Database) (int, error) {
 	return http.StatusOK, nil
 }
 
-func HandleUnlock(name string, database *db.Database) (int, error) {
+func HandleUnlock(name string, database db.Database) (int, error) {
 	state, err := database.GetState(name)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -37,7 +37,7 @@ func HandleUnlock(name string, database *db.Database) (int, error) {
 	return http.StatusOK, nil
 }
 
-func HandleGet(name string, database *db.Database) (int, string, error) {
+func HandleGet(name string, database db.Database) (int, string, error) {
 	state, err := database.GetState(name)
 	if err != nil {
 		return http.StatusInternalServerError, "", err
@@ -48,7 +48,7 @@ func HandleGet(name string, database *db.Database) (int, string, error) {
 	return http.StatusOK, state.Contents, nil
 }
 
-func HandlePost(name, content string, database *db.Database) (int, error) {
+func HandlePost(name, content string, database db.Database) (int, error) {
 	state, err := database.GetState(name)
 	if err != nil {
 		return http.StatusInternalServerError, err

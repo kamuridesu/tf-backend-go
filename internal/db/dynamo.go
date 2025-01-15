@@ -43,6 +43,14 @@ func OpenDynamoDB() (*DynamoDB, error) {
 	return &d, nil
 }
 
+func (d *DynamoDB) Connect() error {
+	return nil
+}
+
+func (d *DynamoDB) Disconenct() error {
+	return nil
+}
+
 func (d *DynamoDB) ListTables() []string {
 	tableNames := make([]string, 0)
 
@@ -112,7 +120,7 @@ func (d *DynamoDB) CreateTableIfNotExists() error {
 	return d.CreateTable()
 }
 
-func (d *DynamoDB) NewState(state *State) error {
+func (d *DynamoDB) SaveNewState(state *State) error {
 
 	item, err := attributevalue.MarshalMap(state.AsDTO())
 	if err != nil {
@@ -170,6 +178,7 @@ func (d *DynamoDB) GetState(name string) (*State, error) {
 		Name:     statedto.Name,
 		Contents: statedto.Contents,
 		Locked:   statedto.Locked == 1,
+		Database: d,
 	}
 
 	return &state, nil

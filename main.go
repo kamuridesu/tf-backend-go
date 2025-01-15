@@ -5,11 +5,12 @@ import (
 
 	"github.com/kamuridesu/tf-backend-go/cmd"
 	"github.com/kamuridesu/tf-backend-go/internal/db"
+
 	"github.com/kamuridesu/tf-backend-go/internal/lambda"
 	"github.com/kamuridesu/tf-backend-go/internal/server"
 )
 
-var DB *db.Database
+var DB db.Database
 
 func mergeUsers(users *[]cmd.User) map[string]string {
 	m := map[string]string{}
@@ -31,13 +32,13 @@ func main() {
 		var err error
 		users, dbParams := cmd.LoadEnvVars()
 
-		var dbType db.DatabaseType = "sqlite3"
+		var dbType db.DatabaseTypeInt = 0
 		dbArgs := "states.db"
 		if dbParams != "" {
-			dbType = "postgres"
+			dbType = 1
 			dbArgs = dbParams
 		}
-		DB, err = db.StartDB(dbType, dbArgs)
+		DB, err = db.NewDatabase(dbType, dbArgs)
 
 		if err != nil {
 			panic(err)

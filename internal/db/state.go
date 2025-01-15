@@ -1,15 +1,17 @@
 package db
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type State struct {
 	Name     string
 	Contents string
 	Locked   bool
-	Database *Database
+	Database Database
 }
 
-func NewState(name string, database *Database) *State {
+func NewState(name string, database Database) *State {
 	return &State{
 		Name:     name,
 		Contents: "",
@@ -38,10 +40,6 @@ func (s *State) AsDTO() StateDTO {
 	return statedto
 }
 
-func GetAllStates(database *Database) ([]*State, error) {
-	return database.GetAllStates()
-}
-
 func (s *State) Lock() error {
 	if s.Locked {
 		return fmt.Errorf("state is locked")
@@ -62,6 +60,5 @@ func (s *State) Unlock() error {
 
 func (s *State) Update(contents string) error {
 	s.Contents = contents
-	s.Database.UpdateState(s)
-	return nil
+	return s.Database.UpdateState(s)
 }

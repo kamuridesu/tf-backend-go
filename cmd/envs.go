@@ -36,7 +36,6 @@ func LoadEnvVars() (*[]User, string) {
 				break
 			}
 		}
-
 		if !r {
 			dbparams = ""
 		}
